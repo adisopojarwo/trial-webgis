@@ -1,0 +1,920 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="initial-scale=1, user-scalable=no, maximum-scale=1, width=device-width"
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+
+    <title>WebGIS Sebaran SPBU DIY</title>
+
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"
+    />
+
+    <style>
+      html,
+      body,
+      #map {
+        height: 100%;
+        width: 100%;
+        margin: 0px;
+        font-family: sans-serif;
+      }
+
+      /* 1. Judul Melayang */
+      .info-title {
+        position: absolute;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000;
+        background-color: #0d47a1;
+        color: white;
+        padding: 10px 30px;
+        border-radius: 5px;
+        text-align: center;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+      }
+      .info-title h2 {
+        margin: 0;
+        font-size: 24px;
+      }
+      .info-title h4 {
+        margin: 5px 0 0;
+        font-weight: normal;
+        font-size: 14px;
+      }
+
+      /* 2. Legenda Peta */
+      .legend-container {
+        position: absolute;
+        bottom: 30px;
+        left: 10px;
+        z-index: 1000;
+        background-color: rgba(255, 255, 255, 0.9);
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+        width: 200px;
+      }
+      .legend-title {
+        font-weight: bold;
+        font-size: 16px;
+        margin-bottom: 10px;
+        text-align: center;
+      }
+      .legend-item {
+        display: block;
+        width: 100%;
+        padding: 8px;
+        margin-bottom: 5px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        background-color: white;
+        color: #333;
+        font-weight: 500;
+        cursor: pointer;
+        text-align: left;
+        position: relative;
+        box-sizing: border-box;
+      }
+      .legend-item:hover {
+        background-color: #f0f0f0;
+      }
+      .legend-item span {
+        margin-left: 25px;
+      }
+      .color-box {
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 15px;
+        height: 15px;
+        border: 1px solid #999;
+      }
+
+      /* Warna Wilayah */
+      .box-kota {
+        background-color: #ff5252;
+      }
+      .box-sleman {
+        background-color: #2196f3;
+      }
+      .box-bantul {
+        background-color: #4caf50;
+      }
+      .box-kulon {
+        background-color: #ffca28;
+      }
+      .box-gunung {
+        background-color: #9c27b0;
+      }
+
+      .btn-reset {
+        background-color: #cfd8dc;
+        color: black;
+        text-align: center;
+        font-weight: bold;
+        margin-top: 10px;
+        border: none;
+      }
+
+      /* 3. Arah Mata Angin (Compass) - CSS Only */
+      .compass {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        z-index: 1000;
+        background-color: rgba(255, 255, 255, 0.8);
+        padding: 5px;
+        border-radius: 50%;
+        border: 2px solid #333;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-weight: bold;
+        font-size: 20px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+      }
+      .compass span {
+        color: red; /* Huruf U / N warna merah */
+      }
+      /* Panah kecil di atas huruf U */
+      .compass::after {
+        content: "";
+        position: absolute;
+        top: -5px;
+        left: 50%;
+        transform: translateX(-50%);
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-bottom: 10px solid red;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <div class="info-title">
+      <h2>Sebaran SPBU</h2>
+      <h4>Daerah Istimewa Yogyakarta</h4>
+    </div>
+
+    <div class="compass" title="Arah Utara">
+      <span>U</span>
+    </div>
+
+    <div class="legend-container">
+      <div class="legend-title">LEGENDA PETA</div>
+      <div class="legend-item">
+        <div class="color-box box-kota"></div>
+        <span>Kota Yogyakarta</span>
+      </div>
+      <div class="legend-item">
+        <div class="color-box box-sleman"></div>
+        <span>Sleman</span>
+      </div>
+      <div class="legend-item">
+        <div class="color-box box-bantul"></div>
+        <span>Bantul</span>
+      </div>
+      <div class="legend-item">
+        <div class="color-box box-kulon"></div>
+        <span>Kulon Progo</span>
+      </div>
+      <div class="legend-item">
+        <div class="color-box box-gunung"></div>
+        <span>Gunungkidul</span>
+      </div>
+      <button class="legend-item btn-reset" onclick="resetView()">
+        RESET TAMPILAN
+      </button>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+
+    <script>
+      // 1. Inisialisasi Peta
+      var map = L.map("map").setView([-7.7956, 110.3695], 10);
+
+      // 2. Basemap OpenStreetMap
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "Maulana Adi Nugraha - 24611031", // <--- Identitas Anda
+      }).addTo(map);
+
+      // 3. Menambahkan Skala Peta (Scale Control) - Syarat Soal
+      L.control
+        .scale({
+          position: "bottomright", // Posisi di kanan bawah
+          metric: true, // Satuan Metrik (km/m)
+          imperial: false, // Matikan satuan mil
+        })
+        .addTo(map);
+
+      // 4. Data SPBU (Hasil Pembersihan Data Baru)
+      var dataSPBU = [
+        {
+          name: "SPBU-YOGYAKARTA ADISUCIPTO",
+          lat: -7.7830104,
+          lng: 110.4080506,
+          kab: "Sleman",
+          alamat:
+            "Jl. Laksda Adisucipto Km. 6, Caturtunggal, Kec. Sleman, Caturtunggal, Kecamatan Depok",
+        },
+        {
+          name: "Pertamina Gas Station 44.555.35 UII",
+          lat: -7.696353,
+          lng: 110.4173901,
+          kab: "Sleman",
+          alamat: "Kaliurang St No.8",
+        },
+        {
+          name: "Pertamina Lempuyangan Gas Station 41.551.01",
+          lat: -7.790452,
+          lng: 110.3801828,
+          kab: "Kota Yogyakarta",
+          alamat: "695J+R37, Jl. Lempuyangan Jl. Kompol Bambang Suprapto",
+        },
+        {
+          name: "SPBU Pertamina 44.552.06 Terban",
+          lat: -7.7821551,
+          lng: 110.3721441,
+          kab: "Kota Yogyakarta",
+          alamat: "Jl. C. Simanjuntak No.17",
+        },
+        {
+          name: "Pertamina gas station",
+          lat: -7.6687121,
+          lng: 110.4288699,
+          kab: "Sleman",
+          alamat: "Jl. Cangkringan No.22",
+        },
+        {
+          name: "SPBU Pertamina 44.555.07",
+          lat: -7.6610553,
+          lng: 110.4072099,
+          kab: "Sleman",
+          alamat: "Jl. Pakem - Turi No.Km. 1",
+        },
+        {
+          name: "Pertamina Petrol Station",
+          lat: -7.7049775,
+          lng: 110.4311841,
+          kab: "Sleman",
+          alamat: "Jl. Besi Jangkang No.KM. 1, RW.7",
+        },
+        {
+          name: "SPBU Pertamina 44.555.18 Pedak",
+          lat: -7.7108032,
+          lng: 110.4092302,
+          kab: "Sleman",
+          alamat: "Kaliurang St No.11",
+        },
+        {
+          name: "Pertamina Petrol Station 44.552.17",
+          lat: -7.7662469,
+          lng: 110.4316464,
+          kab: "Sleman",
+          alamat: "Jl. Raya Tajem No.21",
+        },
+        {
+          name: "SPBU 44.552.11",
+          lat: -7.7812209,
+          lng: 110.352005,
+          kab: "Kota Yogyakarta",
+          alamat: "Jl. Kyai Mojo No.52",
+        },
+        {
+          name: "SPBU Pakembinangun Pertamina 44.555.38",
+          lat: -7.658681,
+          lng: 110.421776,
+          kab: "Sleman",
+          alamat: "Kaliurang St No.Km 17,5",
+        },
+        {
+          name: "SPBU Pertamina 44.555.05 Prujakan",
+          lat: -7.7361962,
+          lng: 110.3945598,
+          kab: "Sleman",
+          alamat: "Pertamina A3c (Sinduharjo), Jl. Kaliurang No.8",
+        },
+        {
+          name: "SPBU Pertamina Gejayan 44.555.03",
+          lat: -7.7598847,
+          lng: 110.3947727,
+          kab: "Sleman",
+          alamat: "Jl. Affandi No.8",
+        },
+        {
+          name: "Pertamina Petrol Station",
+          lat: -7.7197015,
+          lng: 110.3755952,
+          kab: "Sleman",
+          alamat: "79JG+469, Jalan Gito Gati, Sariharjo, Kecamatan Sleman",
+        },
+        {
+          name: "SPBU Pertamina Kentungan 44.55209",
+          lat: -7.7559509,
+          lng: 110.3825131,
+          kab: "Sleman",
+          alamat: "Kaliurang St No.59",
+        },
+        {
+          name: "SPBU Pertamina 44.552.10",
+          lat: -7.7836306,
+          lng: 110.4065861,
+          kab: "Sleman",
+          alamat: "Jl. Laksda Adisucipto No.32",
+        },
+        {
+          name: "SPBU-YOGYAKARTA COKROAMINOTO",
+          lat: -7.785728,
+          lng: 110.3527928,
+          kab: "Kota Yogyakarta",
+          alamat: "Jl. HOS Cokroaminoto No.199",
+        },
+        {
+          name: "SPBU Pertamina 44.555.09",
+          lat: -7.7279328,
+          lng: 110.3802837,
+          kab: "Sleman",
+          alamat: "79CJ+R4F, Jl. Palagan Tentara Pelajar",
+        },
+        {
+          name: "SPBU Pertamina 44.551.09 Semaki",
+          lat: -7.801775,
+          lng: 110.3857727,
+          kab: "Kota Yogyakarta",
+          alamat: "59XP+78R, Jl. Kusumanegara",
+        },
+        {
+          name: "Pertamina Gas Station Mlati 44.555.19",
+          lat: -7.7388252,
+          lng: 110.3626073,
+          kab: "Sleman",
+          alamat: "Jl. Magelang No.204",
+        },
+        {
+          name: "SPBU Balong Pertamina 44.555.31",
+          lat: -7.6810903,
+          lng: 110.3897523,
+          kab: "Sleman",
+          alamat: "899Q+HW6, Jl. Palagan Tentara Pelajar",
+        },
+        {
+          name: "pertamina",
+          lat: -7.7016629,
+          lng: 110.4064035,
+          kab: "Sleman",
+          alamat: "",
+        },
+        {
+          name: "SPBU Pertamina Jombor",
+          lat: -7.7468233,
+          lng: 110.353978,
+          kab: "Sleman",
+          alamat: "Jl. Ring Road Utara No.81",
+        },
+        {
+          name: "SPBU Pertamina",
+          lat: -7.7602111,
+          lng: 110.3692957,
+          kab: "Sleman",
+          alamat: "Monjali St No.78 C",
+        },
+        {
+          name: "SPBU Medari",
+          lat: -7.6764903,
+          lng: 110.336834,
+          kab: "Sleman",
+          alamat: "88FP+CP4",
+        },
+        {
+          name: "Mushola SPBU Yogyakarta",
+          lat: -7.8021144,
+          lng: 110.3783925,
+          kab: "Kota Yogyakarta",
+          alamat: "SPBU 44.551.15, Jl. Sultan Agung No.66",
+        },
+        {
+          name: "SPBU Pertamina Wedomartani 44.555.20",
+          lat: -7.7406003,
+          lng: 110.4339428,
+          kab: "Sleman",
+          alamat: "7C5M+QH4, Jl. Raya Tajem",
+        },
+        {
+          name: "Pertamina Petrol Station 44.555.15",
+          lat: -7.774649,
+          lng: 110.462672,
+          kab: "Sleman",
+          alamat: "Jl. Raya Solo - Yogyakarta No.km 13",
+        },
+        {
+          name: "Pertamina Petrol Station 44.552.16 Munggur",
+          lat: -7.7855425,
+          lng: 110.3879761,
+          kab: "Kota Yogyakarta",
+          alamat: "",
+        },
+        {
+          name: "Pertamina Gas Station Mulungan",
+          lat: -7.7326805,
+          lng: 110.3636619,
+          kab: "Sleman",
+          alamat: "Jalan Kakap Raya",
+        },
+        {
+          name: "SPBU Bimomartani Pertamina 44.555.36",
+          lat: -7.6895022,
+          lng: 110.4617592,
+          kab: "Sleman",
+          alamat: "Jl. Cangkringan No.3",
+        },
+        {
+          name: "SPBU Pertamina 44.551.06 Kadipiro",
+          lat: -7.8005864,
+          lng: 110.3452046,
+          kab: "Bantul",
+          alamat: "Wates St No.KM.3",
+        },
+        {
+          name: "Pertamina SPBU Dukuh",
+          lat: -7.708579,
+          lng: 110.354762,
+          kab: "Sleman",
+          alamat: "Jl. Magelang No.KM. 11",
+        },
+        {
+          name: "Pertamina Petrol Station 44.551.04 Bugisan",
+          lat: -7.8123021,
+          lng: 110.3514086,
+          kab: "Kota Yogyakarta",
+          alamat: "Jl. Sugeng Jeroni",
+        },
+        {
+          name: "SPBU Pertamina 44.555.12 Kembang Arum",
+          lat: -7.652509,
+          lng: 110.373582,
+          kab: "Sleman",
+          alamat: "89WF+XCW, Jl. Tempel - Turi",
+        },
+        {
+          name: "Pertamina Petrol Station Pakualaman",
+          lat: -7.8020653,
+          lng: 110.3784159,
+          kab: "Kota Yogyakarta",
+          alamat: "Jl. Sultan Agung No.66",
+        },
+        {
+          name: "Pertamina Gas Station 44.552.13 Caturtunggal",
+          lat: -7.7739794,
+          lng: 110.4103353,
+          kab: "Sleman",
+          alamat: "6CG6+C44, Jl. Babarsari",
+        },
+        {
+          name: "Pertamina Petrol Station",
+          lat: -7.8240828,
+          lng: 110.3779905,
+          kab: "Kota Yogyakarta",
+          alamat: "59GH+959, Jl. Lowanu",
+        },
+        {
+          name: "SPBU Pertamina 44.552.04 Adisucipto",
+          lat: -7.7831014,
+          lng: 110.436195,
+          kab: "Sleman",
+          alamat: "Jl. Raya Solo - Yogyakarta No.KM. 9",
+        },
+        {
+          name: "Spbu Timoho Pertamina",
+          lat: -7.798051,
+          lng: 110.3926384,
+          kab: "Kota Yogyakarta",
+          alamat: "Jl. Ipda Tut Harsono No.28",
+        },
+        {
+          name: "Pertamina Petrol Station 44.551.11 Giwangan",
+          lat: -7.8361488,
+          lng: 110.3933584,
+          kab: "Bantul",
+          alamat: "597V+G8X, Jl. Ringroad Selatan",
+        },
+        {
+          name: "Pertamina Petrol Station Gambiran",
+          lat: -7.8180737,
+          lng: 110.3903973,
+          kab: "Kota Yogyakarta",
+          alamat: "Jl. Perintis Kemerdekaan",
+        },
+        {
+          name: "SPBU 44.555.32 Krapyak",
+          lat: -7.695219,
+          lng: 110.3457779,
+          kab: "Kota Yogyakarta",
+          alamat: "883W+W86",
+        },
+        {
+          name: "Pertamina Petrol Station 44.552.03",
+          lat: -7.7984393,
+          lng: 110.408291,
+          kab: "Bantul",
+          alamat: "6C25+J8F, Jl. Raya Janti",
+        },
+        {
+          name: "SPBU Pertamina Kalasan",
+          lat: -7.7612724,
+          lng: 110.4769384,
+          kab: "Sleman",
+          alamat: "Jl. Raya Solo - Yogyakarta No.Km. 16",
+        },
+        {
+          name: "PERTAMINA",
+          lat: -7.6798593,
+          lng: 110.4000062,
+          kab: "Sleman",
+          alamat: "8CC2+322, Jl. Balong - Degolan",
+        },
+        {
+          name: "Pertamina Petrol Station 44.551.01 Dukuh",
+          lat: -7.8189845,
+          lng: 110.3559367,
+          kab: "Bantul",
+          alamat: "Jl. Bantul No.87",
+        },
+        {
+          name: "SPBU Pertamina Getas",
+          lat: -7.7342969,
+          lng: 110.3396613,
+          kab: "Sleman",
+          alamat: "788Q+7VM, Jl. Kebon Agung",
+        },
+        {
+          name: "SPBU KASAM 4455117",
+          lat: -7.8156056,
+          lng: 110.374246,
+          kab: "Kota Yogyakarta",
+          alamat: "Jl. Kolonel Sugiyono No.100",
+        },
+        {
+          name: "SPBU Pertamina Kadisoka 44.555.33",
+          lat: -7.7533002,
+          lng: 110.4462946,
+          kab: "Sleman",
+          alamat: "Jl. Raya Kadisoka",
+        },
+        {
+          name: "PERTAMINA",
+          lat: -7.7447027,
+          lng: 110.4038322,
+          kab: "Sleman",
+          alamat: "7C43+4G8, Jl. Pondok Raya",
+        },
+        {
+          name: "SPBU 44.555.25",
+          lat: -7.7217695,
+          lng: 110.4727281,
+          kab: "Sleman",
+          alamat: "",
+        },
+        {
+          name: "Pertamina Gas Station 44.555.27",
+          lat: -7.7131898,
+          lng: 110.3429766,
+          kab: "Sleman",
+          alamat: "Jl. Purbaya Pangukan No.Km 3",
+        },
+        {
+          name: 'SPBU "KASAM" Babarsari',
+          lat: -7.7765374,
+          lng: 110.4152936,
+          kab: "Sleman",
+          alamat: "6CF8+94M",
+        },
+        {
+          name: "SPBU Pertamina 44.551.02 Ketandan",
+          lat: -7.810999,
+          lng: 110.4046305,
+          kab: "Bantul",
+          alamat: "Wonosari St",
+        },
+        {
+          name: "SPBU 44.555.39",
+          lat: -7.7016658,
+          lng: 110.4064292,
+          kab: "Sleman",
+          alamat: "7CX4+8HM",
+        },
+        {
+          name: "Pertamina Petrol Station",
+          lat: -7.7800494,
+          lng: 110.3432822,
+          kab: "Sleman",
+          alamat: "Jl. Godean No.4 5, RW.66",
+        },
+        {
+          name: "SPBU PERTAMINA 44.555.21 MADUREJO",
+          lat: -7.7884453,
+          lng: 110.4825956,
+          kab: "Bantul",
+          alamat: "Jalan Piyungan - Prambanan KM. 6, Madurejo, Piyungan",
+        },
+        {
+          name: "SPBU Pertamina 44.555.14 Kalitirto",
+          lat: -7.7790969,
+          lng: 110.4557365,
+          kab: "Sleman",
+          alamat: "Jl. Raya Solo - Yogyakarta No.Km. 11.5",
+        },
+        {
+          name: "Pom Bensin Puspo Wardoyo",
+          lat: -7.6811444,
+          lng: 110.3898009,
+          kab: "Sleman",
+          alamat: "899Q+GWV, Jl. Palagan Tentara Pelajar",
+        },
+        {
+          name: "Godean Pertamina Petrol Station",
+          lat: -7.7735639,
+          lng: 110.3151882,
+          kab: "Sleman",
+          alamat: "Jl. Ngapak - Kentheng KM. 7.8",
+        },
+        {
+          name: "Ambarketawang Pertamina 44.552.07 Petrol Station",
+          lat: -7.8028087,
+          lng: 110.3131752,
+          kab: "Sleman",
+          alamat: "58W7+V7F, National Rte 3",
+        },
+        {
+          name: "Pertamina Petrol Station 44.551.18 Sewon",
+          lat: -7.8448515,
+          lng: 110.3609983,
+          kab: "Bantul",
+          alamat: "5946+4CM, Jl. Parangtritis No.KM. 5.2",
+        },
+        {
+          name: "Pertamina Petrol Station 44.551.08 Jogokariyan",
+          lat: -7.8245019,
+          lng: 110.367444,
+          kab: "Kota Yogyakarta",
+          alamat: "Jl. Modang Jl. Jogokaryan No.425",
+        },
+        {
+          name: "SPBU Cebongan",
+          lat: -7.7322179,
+          lng: 110.3255378,
+          kab: "Sleman",
+          alamat: "Jl. Kebon Agung No.16b",
+        },
+        {
+          name: "Pom bensin",
+          lat: -7.7904926,
+          lng: 110.3801097,
+          kab: "Kota Yogyakarta",
+          alamat: "695J+R25",
+        },
+        {
+          name: "Outlet Green Nitrogen (SPBU 44.555.08)",
+          lat: -7.7234875,
+          lng: 110.4015473,
+          kab: "Sleman",
+          alamat: "7CG2+JJ3, Kaliurang St",
+        },
+        {
+          name: "SPBU TRIHANGGO",
+          lat: -7.755142,
+          lng: 110.3388436,
+          kab: "Sleman",
+          alamat: "Jl. Ring Road Bar. No.60",
+        },
+        {
+          name: "Pertamina Spbu 4455704",
+          lat: -7.8281231,
+          lng: 110.4475367,
+          kab: "Bantul",
+          alamat: "Wonosari St No.Km. 10",
+        },
+        {
+          name: "Pertamina 44.555.22",
+          lat: -7.7582022,
+          lng: 110.3202607,
+          kab: "Sleman",
+          alamat: "68RC+P46, Jalan",
+        },
+        {
+          name: "Pertamina petrol station 44.557.07",
+          lat: -7.860541,
+          lng: 110.374306,
+          kab: "Bantul",
+          alamat: "Jl. Imogiri Barat No.No km 5",
+        },
+        {
+          name: "SPBU Berbah 44.555.34",
+          lat: -7.8048601,
+          lng: 110.4460555,
+          kab: "Sleman",
+          alamat: "Jl. Raya Berbah No.4b",
+        },
+        {
+          name: "Pertamina Petrol Station 44.557.11 Pucung",
+          lat: -7.8528534,
+          lng: 110.3418986,
+          kab: "Bantul",
+          alamat: "48WR+VQ2",
+        },
+        {
+          name: "SPBU GODEAN",
+          lat: -7.7663017,
+          lng: 110.2894541,
+          kab: "Sleman",
+          alamat: "",
+        },
+        {
+          name: "ilove nitrogen",
+          lat: -7.6687703,
+          lng: 110.4288267,
+          kab: "Sleman",
+          alamat: "8CJH+FGW",
+        },
+        {
+          name: "Pertamina Petrol Station 44.558.03 Gabusan",
+          lat: -7.8858922,
+          lng: 110.3524401,
+          kab: "Bantul",
+          alamat: "Jl. Parangtritis Km. 11, Rendeng Kulon, Sewon",
+        },
+        {
+          name: "PERTAMINA",
+          lat: -7.772659,
+          lng: 110.3756706,
+          kab: "Sleman",
+          alamat: "69GG+W7M, Jl. Persatuan",
+        },
+        {
+          name: "PERTAMINA",
+          lat: -7.7616868,
+          lng: 110.3645651,
+          kab: "Sleman",
+          alamat: "69Q7+8RG, Jl. Selokan Mataram",
+        },
+        {
+          name: "SPBU Pertamina Bibis Raya",
+          lat: -7.8292364,
+          lng: 110.3191495,
+          kab: "Bantul",
+          alamat: "58C9+4G7, Jl. Bibis Raya",
+        },
+        {
+          name: "Pertamina Petrol Station",
+          lat: -7.8207124,
+          lng: 110.4215503,
+          kab: "Bantul",
+          alamat: "Wonosari St No.km 7, RW.3",
+        },
+        {
+          name: "Pertamina Petrol Station",
+          lat: -7.8649339,
+          lng: 110.3895918,
+          kab: "Bantul",
+          alamat: "49PQ+2RG, DSN. Jati, Istimewa Yogyakart, Wonokromo, Pleret",
+        },
+        {
+          name: "PERTAMINA",
+          lat: -7.7765391,
+          lng: 110.4150537,
+          kab: "Sleman",
+          alamat: "6CF8+92M, Jl. Seturan Raya Jl. Babarsari",
+        },
+        {
+          name: "SPBU Jl Kaliurang",
+          lat: -7.7235317,
+          lng: 110.401432,
+          kab: "Sleman",
+          alamat: "Kaliurang St No.8",
+        },
+        {
+          name: "SPBU JAMBIDAN",
+          lat: -7.8437681,
+          lng: 110.4107642,
+          kab: "Bantul",
+          alamat: "Jl. Pleret No.2",
+        },
+        {
+          name: "SPBU NYAEN PENDOWOHARJO",
+          lat: -7.6908573,
+          lng: 110.3685596,
+          kab: "Sleman",
+          alamat: "8959+MC3, Jl. Pandowoharjo",
+        },
+        {
+          name: "Pertamina Petrol Station 44.551.14 Tamantirto",
+          lat: -7.8189172,
+          lng: 110.3244579,
+          kab: "Bantul",
+          alamat: "58JF+CQP, Jl. Ringroad Barat Daya, Tamantirto, Kasihan",
+        },
+        {
+          name: "Pertamina Petrol Station 44.557.10 Candimas",
+          lat: -7.8129039,
+          lng: 110.2669614,
+          kab: "Kulon Progo",
+          alamat: "Jl. Wates No.Km 11",
+        },
+      ];
+
+      // 5. Custom Icon
+      var iconSPBU = L.icon({
+        iconUrl: "assets/icon-spbu.png", // Pastikan file gambar ini ada
+        iconSize: [30, 30],
+        iconAnchor: [15, 30],
+        popupAnchor: [0, -30],
+      });
+
+      // 6. Menampilkan Marker
+      dataSPBU.forEach(function (spbu) {
+        var marker = L.marker([spbu.lat, spbu.lng], { icon: iconSPBU });
+        marker.bindPopup(
+          "<div style='text-align:center; min-width:150px;'>" +
+            "<b>" +
+            spbu.name +
+            "</b><br>" +
+            "<span style='font-size:12px; color:#555;'>" +
+            spbu.alamat +
+            "</span><br>" +
+            "<hr style='margin:5px 0; border:0; border-top:1px solid #eee;'>" +
+            "<i style='font-size:11px;'>Wilayah: " +
+            spbu.kab +
+            "</i>" +
+            "</div>",
+        );
+        marker.addTo(map);
+      });
+
+      // 7. Fungsi Pewarnaan Wilayah (GeoJSON)
+      function getColor(name) {
+        if (!name) return "#5d4037";
+        var lowerName = name.toLowerCase();
+
+        if (lowerName.includes("sleman")) return "#2196f3"; // Biru
+        if (lowerName.includes("bantul")) return "#4caf50"; // Hijau
+        if (lowerName.includes("gunung")) return "#9c27b0"; // Ungu
+        if (lowerName.includes("kulon")) return "#ffca28"; // Kuning
+        if (lowerName.includes("yogyakarta") || lowerName.includes("kota"))
+          return "#ff5252"; // Merah
+
+        return "#5d4037"; // Warna default
+      }
+
+      function style(feature) {
+        return {
+          fillColor: getColor(feature.properties.kab_kota),
+          weight: 1.5,
+          opacity: 1,
+          color: "white",
+          dashArray: "3",
+          fillOpacity: 0.6,
+        };
+      }
+
+      // 8. Load Peta Wilayah
+      fetch("jogja.geojson")
+        .then((res) => res.json())
+        .then((data) => {
+          L.geoJSON(data, {
+            style: style,
+            onEachFeature: function (feature, layer) {
+              layer.bindTooltip("Wilayah: " + feature.properties.kab_kota, {
+                sticky: true,
+              });
+              layer.on("click", function (e) {
+                map.fitBounds(e.target.getBounds());
+              });
+            },
+          }).addTo(map);
+        })
+        .catch((err) =>
+          console.error(
+            "Gagal memuat jogja.geojson. Pastikan file ada di folder yang sama.",
+            err,
+          ),
+        );
+
+      // 9. Fungsi Reset Tampilan
+      function resetView() {
+        map.setView([-7.7956, 110.3695], 10);
+      }
+    </script>
+  </body>
+</html>
